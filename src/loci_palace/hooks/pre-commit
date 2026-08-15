@@ -1,0 +1,103 @@
+#!/bin/sh
+#
+# Pre-commit hook. MACHINERY - contains no vault content.
+#
+# Tracked in the repo (unlike .git/hooks/), so it travels with a clone.
+# Activate on any machine with:
+#     git config core.hooksPath <vault>/System/hooks
+#
+# Bypass a single commit with: git commit --no-verify
+#
+# What it does:
+#   1. Lints the vault. Blocks on errors.
+#   2. Regenerates the manifest and stages it - but ONLY when the working tree
+#      has no unstaged or untracked note changes. The manifest compiles from
+#      the working tree, so auto-staging during a partial commit would describe
+#      notes that are not in that commit.
+#
+# The vault directory name is resolved at runtime, never hardcoded.
+
+REPO_ROOT=$(git rev-parse --show-toplevel) || exit 0
+cd "$REPO_ROOT" || exit 0
+
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "pre-commit: python3 not found - skipping checks."
+    exit 0
+fi
+
+# Locate the vault directory via vaultlib, which reads .loci.json or detects it.
+VAULT_DIR=$(python3 - <<'PY' 2>/dev/null
+import glob, os, sys
+for lib in glob.glob("*/System/vaultlib.py"):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(lib)))
+    try:
+        import vaultlib as V
+        name = V.vault_dir(os.getcwd(), required=False)
+        if name:
+            print(name)
+    except Exception:
+        pass
+    break
+PY
+)
+
+if [ -z "$VAULT_DIR" ]; then
+    echo "pre-commit: cannot locate the vault directory - skipping checks."
+    exit 0
+fi
+
+fail() {
+    echo ""
+    echo "-------------------------------------------------------"
+    echo "  Commit blocked: $1"
+    echo "  Bypass with: git commit --no-verify"
+    echo "-------------------------------------------------------"
+    exit 1
+}
+
+# --- 1. Schema and integrity ------------------------------------------------
+LINTER="${VAULT_DIR}/System/lint.py"
+if [ -f "$LINTER" ]; then
+    python3 "$LINTER" --quiet || fail "vault lint failed."
+else
+    echo "pre-commit: $LINTER not found - skipping lint."
+fi
+
+# --- 2. Manifest ------------------------------------------------------------
+MANIFEST_SCRIPT="${VAULT_DIR}/System/manifest.py"
+MANIFEST_FILE="${VAULT_DIR}/Views/manifest.tsv"
+
+if [ ! -f "$MANIFEST_SCRIPT" ]; then
+    echo "pre-commit: $MANIFEST_SCRIPT not found - skipping manifest."
+    exit 0
+fi
+
+if python3 "$MANIFEST_SCRIPT" --check >/dev/null 2>&1; then
+    exit 0
+fi
+
+unstaged=$(git diff --name-only -- '*.md' 2>/dev/null)
+untracked=$(git ls-files --others --exclude-standard -- '*.md' 2>/dev/null)
+
+if [ -n "$unstaged" ] || [ -n "$untracked" ]; then
+    echo ""
+    echo "  Manifest is stale, and the working tree has note changes that are"
+    echo "  NOT part of this commit:"
+    [ -n "$unstaged" ]  && printf '    modified (unstaged): %s\n' "$unstaged"
+    [ -n "$untracked" ] && printf '    untracked:           %s\n' "$untracked"
+    echo ""
+    echo "  The manifest compiles from the working tree, so regenerating now"
+    echo "  would describe notes this commit does not contain. Refusing to"
+    echo "  guess. Either stage those notes, or run:"
+    echo ""
+    echo "      python3 $MANIFEST_SCRIPT"
+    echo "      git add $MANIFEST_FILE"
+    echo ""
+    fail "manifest is stale and cannot be safely regenerated."
+fi
+
+python3 "$MANIFEST_SCRIPT" || fail "manifest regeneration failed."
+git add "$MANIFEST_FILE" || fail "could not stage $MANIFEST_FILE."
+echo "  pre-commit: regenerated and staged $MANIFEST_FILE"
+
+exit 0

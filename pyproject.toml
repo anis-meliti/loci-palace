@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "loci-palace"
+version = "0.1.0"
+description = "A structured, self-validating Markdown vault that gives AI assistants persistent, routable memory."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+    { name = "TODO-your-name", email = "TODO@example.com" },
+]
+keywords = ["obsidian", "markdown", "mcp", "memory", "notes", "agent", "claude"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Topic :: Text Processing :: Markup :: Markdown",
+    "Topic :: Utilities",
+]
+
+# Deliberately zero runtime dependencies.
+# Stdlib only. A memory system should not rot because a transitive dependency
+# did, and a zero-dep package is trivially auditable by a colleague deciding
+# whether to trust it.
+dependencies = []
+
+[project.scripts]
+loci = "loci_palace.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/TODO/loci-palace"
+Source = "https://github.com/TODO/loci-palace"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/loci_palace"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/loci_palace/templates" = "loci_palace/templates"
+"src/loci_palace/views" = "loci_palace/views"
+"src/loci_palace/hooks" = "loci_palace/hooks"
+"src/loci_palace/scripts" = "loci_palace/scripts"
+
+[tool.hatch.build.targets.sdist]
+include = ["src/loci_palace", "README.md", "LICENSE"]

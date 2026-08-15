@@ -1,0 +1,44 @@
+filters:
+  and:
+    - type == "project"
+formulas:
+  days_stale: if(updated, (today() - date(updated)).days, "")
+properties:
+  file.name:
+    displayName: Note
+  file.folder:
+    displayName: Project
+  status:
+    displayName: Status
+  updated:
+    displayName: Updated
+  formula.days_stale:
+    displayName: Days since update
+views:
+  - type: table
+    name: Active
+    filters:
+      and:
+        - status == "active"
+    order:
+      - file.name
+      - file.folder
+      - updated
+      - formula.days_stale
+  - type: table
+    name: All projects
+    order:
+      - file.name
+      - file.folder
+      - status
+      - updated
+      - formula.days_stale
+  - type: table
+    name: Ideas (not started)
+    filters:
+      and:
+        - status == "idea"
+    order:
+      - file.name
+      - file.folder
+      - updated

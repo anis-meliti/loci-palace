@@ -1,0 +1,61 @@
+filters:
+  and:
+    - file.ext == "md"
+    - file.path.startsWith("Luna/")
+formulas:
+  missing_type: if(type, "", "MISSING type")
+  missing_status: if(status, "", "MISSING status")
+  missing_updated: if(updated, "", "MISSING updated")
+  has_legacy_date: if(date, "LEGACY date field", "")
+  days_stale: if(updated, (today() - date(updated)).days, "")
+properties:
+  file.name:
+    displayName: Note
+  file.folder:
+    displayName: Folder
+  formula.missing_type:
+    displayName: Type
+  formula.missing_status:
+    displayName: Status
+  formula.missing_updated:
+    displayName: Updated
+  formula.has_legacy_date:
+    displayName: Legacy
+  formula.days_stale:
+    displayName: Days stale
+views:
+  - type: table
+    name: Schema violations
+    filters:
+      or:
+        - not:
+            - type
+        - not:
+            - updated
+        - date
+    order:
+      - file.name
+      - file.folder
+      - formula.missing_type
+      - formula.missing_status
+      - formula.missing_updated
+      - formula.has_legacy_date
+  - type: table
+    name: Staleness
+    filters:
+      and:
+        - updated
+    order:
+      - file.name
+      - file.folder
+      - status
+      - updated
+      - formula.days_stale
+  - type: table
+    name: Everything
+    order:
+      - file.name
+      - file.folder
+      - type
+      - status
+      - updated
