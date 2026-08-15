@@ -4,17 +4,19 @@ Set the `covers:` routing field on a note. MACHINERY - contains no vault content
 
 Surgical: rewrites exactly one frontmatter line and leaves every other byte
 untouched. Avoids full-file rewrites, which risk transcription errors on long
-notes and are how working config gets silently dropped.
+notes and are how working content gets silently dropped.
 
 Usage:
-    python3 Luna/System/covers.py <note-path> "terms, more terms"
-    python3 Luna/System/covers.py <note-path> --show
-    python3 Luna/System/covers.py <note-path> --clear
+    python3 <vault>/System/covers.py <note-path> "terms, more terms"
+    python3 <vault>/System/covers.py <note-path> --show
+    python3 <vault>/System/covers.py <note-path> --clear
+
+Paths are repo-relative or absolute; the vault directory name is never assumed.
 
 Deliberately does NOT bump `updated:`.
 `covers` is routing metadata, not content. Bumping `updated` would reset the
 staleness signal that Views/Projects.base depends on - a note untouched for
-126 days would look fresh because someone improved its keywords.
+months would look fresh merely because someone improved its keywords.
 
 No dependencies. Python 3.9+.
 """
