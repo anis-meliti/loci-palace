@@ -1,0 +1,39 @@
+{
+  "_comment": [
+    "Per-machine configuration. COPY to .loci-local.json and edit.",
+    "The real file is gitignored: it holds absolute paths and private terms,",
+    "neither of which should enter tracked memory.",
+    "",
+    "roots         - maps a registry root_key to an absolute path on THIS",
+    "                machine. '.' means the vault repository itself.",
+    "",
+    "private_terms - strings that must never appear in an exported machinery",
+    "                bundle. Checked by System/export.sh.",
+    "",
+    "                Include: your name in every form that appears in paths,",
+    "                your machine hostname, employer and client names, and the",
+    "                names of private projects.",
+    "",
+    "                Do NOT include the vault folder name, or words that appear",
+    "                throughout the machinery by design - every export would",
+    "                fail. Terms shorter than 3 characters are skipped, because",
+    "                they match everything and a check that cries wolf is worse",
+    "                than no check.",
+    "",
+    "                List terms that currently pass, not only ones you suspect.",
+    "                The scan is a regression test: it catches the leak you",
+    "                introduce six months from now."
+  ],
+  "machine": "describe-this-machine",
+  "roots": {
+    "vault": "."
+  },
+  "private_terms": [
+    "YourFirstName",
+    "YourSurname",
+    "your-unix-username",
+    "your-machine-hostname",
+    "An Employer Name",
+    "A Private Project Name"
+  ]
+}

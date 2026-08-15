@@ -1,0 +1,33 @@
+# Editor UI state — changes constantly, pure noise in diffs
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+.trash/
+
+# Per-machine config — absolute paths and private terms
+.loci-local.json
+
+# Export output — build artifact, regenerable from source
+dist/
+
+# macOS
+.DS_Store
+._*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Secrets — never commit, even to a local-only repository
+.env
+*.key
+*_secret*
+
+# Generated indexes
+.semantic-index/
+*.embeddings.json
+
+# Node
+node_modules/

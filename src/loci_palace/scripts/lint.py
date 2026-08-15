@@ -44,10 +44,16 @@ import vaultlib as V  # noqa: E402
 SENTINEL_OPEN = re.compile(r"<!--\s*@generated:([\w-]+)\s*-->")
 SENTINEL_CLOSE = re.compile(r"<!--\s*/@generated:([\w-]+)\s*-->")
 
-# Scaffolded templates carry this marker. It is an ERROR until deleted:
-# an unfilled placeholder is worse than an absent fact, because the manifest
-# routes to it confidently and the assistant believes what it finds.
-TEMPLATE_MARKER = re.compile(r"TEMPLATE-UNFILLED")
+# Scaffolded templates carry this marker INSIDE AN HTML COMMENT. It is an ERROR
+# until deleted: an unfilled placeholder is worse than an absent fact, because
+# the manifest routes to it confidently and the assistant believes what it finds.
+#
+# Matching only inside a comment is deliberate. A bare substring match also fires
+# on notes that *document* the marker - roadmaps, schemas, session logs. That
+# false positive has now occurred four times in this codebase in different forms
+# (sentinel regex, escaped pipes, frontmatter delimiters, this). The rule:
+# match the structure, never the token.
+TEMPLATE_MARKER = re.compile(r"<!--[^>]*TEMPLATE-UNFILLED", re.DOTALL)
 
 STACKED_FM = re.compile(
     r"^---[ \t]*\n(?:[ \t]*[\w-]+[ \t]*:[^\n]*\n)+[ \t]*---[ \t]*$",
@@ -92,9 +98,9 @@ def lint(repo_root):
         clean = V.strip_code(text)
         fm, problem = V.parse_frontmatter(text)
 
-        if TEMPLATE_MARKER.search(text):
+        if TEMPLATE_MARKER.search(clean):
             findings[rel].append(
-                (ERROR, "still a template - fill it in and delete the TEMPLATE-UNFILLED marker")
+                (ERROR, "still a template - fill it in and delete the marker comment")
             )
 
         if problem:
