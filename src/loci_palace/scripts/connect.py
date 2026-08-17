@@ -2,34 +2,45 @@
 """
 Connect assistant clients to this vault. MACHINERY - contains no vault content.
 
-Writes a marked block into the global instructions file (~/.claude/CLAUDE.md)
-so that CLI and editor clients know the vault exists and how to route to it,
-from any directory - or from none at all.
+Two installation paths, one source of truth.
+
+  Clients that support @import (Claude Code CLI, editor extensions):
+      an import line pointing at System/BOOT.md is written into the global
+      instructions file. BOOT.md is re-read every session, so edits take
+      effect immediately and nothing goes stale.
+
+  Clients that do not (Desktop chat):
+      BOOT.md's contents are printed for pasting into
+      Settings -> Profile -> Personal Preferences. This path DOES go stale;
+      re-paste after editing BOOT.md.
+
+WHY AN IMPORT RATHER THAN A COPY
+--------------------------------
+An earlier version inlined the whole instruction into the global file. That
+works and then quietly diverges: the vault is edited, the copy is not. An
+import has one source.
+
+The cost of an import is that the ENTIRE target file is loaded every session.
+That is why BOOT.md is pure payload with no commentary - rationale lives in
+System/Runtime Architecture.md, which is not imported.
 
 WHAT THIS DOES NOT DO
 ---------------------
-It does not register an MCP server. That is deliberate:
-
-  - the MCP server is a separate project, not part of this package
-  - different users run different servers (filesystem, REST-wrapper, custom)
-  - registration needs credentials, and a scaffolding tool should not handle
-    secrets
-
-It prints the guidance instead. Reachability is yours to configure; routing
-instructions are what this automates.
+It does not register an MCP server: the server is a separate project, users
+run different ones, and registration needs credentials a scaffolding tool
+should not handle. It prints the guidance instead.
 
 SAFETY
 ------
 The global instructions file usually already contains the user's own content.
-This writes ONLY between sentinel markers and leaves everything else byte for
-byte intact - the same rule the vault applies to generated blocks.
-
-Dry run is the default. Nothing is written without --apply.
+This writes ONLY between sentinel markers and leaves the rest byte for byte
+intact. Dry run is the default.
 
 Usage:
     python3 <vault>/System/connect.py            # show what would change
-    python3 <vault>/System/connect.py --apply    # write the block
-    python3 <vault>/System/connect.py --remove   # remove the block
+    python3 <vault>/System/connect.py --apply    # write the import line
+    python3 <vault>/System/connect.py --paste    # print the Desktop block
+    python3 <vault>/System/connect.py --remove
     python3 <vault>/System/connect.py --global-file PATH
 
 No dependencies. Python 3.9+.
@@ -47,40 +58,20 @@ BEGIN = "<!-- loci:begin - managed by connect.py, edit outside these markers -->
 END = "<!-- loci:end -->"
 
 DEFAULT_GLOBAL = os.path.expanduser("~/.claude/CLAUDE.md")
+BOOT_REL = ("System", "BOOT.md")
 
 
-def build_block(vault_abs, vault_dir):
-    return f"""{BEGIN}
-## Memory vault
+def boot_path(repo_root):
+    return V.vault_path(repo_root, *BOOT_REL)
 
-Persistent memory for this user lives in a vault at:
 
-    {vault_abs}
-
-Reach it with the vault MCP tools (read/write/search/list). Use those tools
-rather than the filesystem: the vault is usually not the working directory,
-and may not be reachable as a path at all.
-
-**Finding things.** Read `{vault_dir}/Views/manifest.tsv` and match the question
-against the `covers` column, then open that one note. Do not search the vault
-for a file whose path the manifest already gives you.
-
-**Identity.** `{vault_dir}/Context/CRITICAL_FACTS.md` holds who this user is,
-their constraints and preferences. Read it when a question depends on personal
-context. It is not preloaded, by design.
-
-**These phrasings mean "consult the vault", not "store a new fact":**
-"remember X", "what do you know about X", "where are we on X",
-"why did we decide X", "continue X", "what's the status of X".
-
-**Before writing.** Read `{vault_dir}/System/Schema.md`. It is binding.
-Never append to `{vault_dir}/Context/`, `{vault_dir}/Index.md`, or
-`{vault_dir}/System/` - those are overwrite-only. After adding or renaming a
-note, regenerate the manifest.
-
-**Do not use native memory features.** This vault is the only memory store.
-A second store that is invisible to the other clients defeats the purpose.
-{END}"""
+def build_block(repo_root):
+    """The managed block: an import line, and nothing else."""
+    return (
+        f"{BEGIN}\n"
+        f"@{boot_path(repo_root)}\n"
+        f"{END}"
+    )
 
 
 def read_file(path):
@@ -119,12 +110,11 @@ def remove_block(existing):
 
 
 def detect_clients():
-    """Report which clients are present. Informational only."""
     found = []
     if shutil.which("claude"):
-        found.append("Claude Code CLI")
+        found.append(("Claude Code CLI", "import"))
     if os.path.isdir("/Applications/Claude.app"):
-        found.append("Claude Desktop")
+        found.append(("Claude Desktop", "paste"))
     for name, path in (
         ("VS Code", "~/.vscode/extensions"),
         ("Cursor", "~/.cursor/extensions"),
@@ -133,15 +123,29 @@ def detect_clients():
         if os.path.isdir(d):
             try:
                 if any("claude" in e.lower() for e in os.listdir(d)):
-                    found.append(f"{name} (Claude extension)")
+                    found.append((f"{name} (Claude extension)", "import"))
             except OSError:
                 pass
     return found
 
 
+def boot_body(repo_root):
+    """BOOT.md minus its frontmatter - what a paste-only client needs."""
+    text = read_file(boot_path(repo_root))
+    if text is None:
+        return None
+    _, body = V.split_frontmatter(text)
+    return body.strip()
+
+
+def approx_tokens(text):
+    return max(1, len(text) // 4)
+
+
 def main():
     apply_ = "--apply" in sys.argv
     remove = "--remove" in sys.argv
+    paste = "--paste" in sys.argv
 
     target = DEFAULT_GLOBAL
     if "--global-file" in sys.argv:
@@ -151,21 +155,42 @@ def main():
 
     repo_root = V.find_repo_root()
     vault_dir = V.vault_dir(repo_root)
-    vault_abs = os.path.abspath(repo_root)
+    boot = boot_path(repo_root)
+
+    if not os.path.isfile(boot):
+        print(f"error: {vault_dir}/System/BOOT.md not found", file=sys.stderr)
+        print("       connect.py installs an import pointing at it.", file=sys.stderr)
+        return 2
+
+    body = boot_body(repo_root)
+
+    if paste:
+        print()
+        print("Paste this into Settings -> Profile -> Personal Preferences")
+        print(f"(Desktop cannot import; re-paste after editing {vault_dir}/System/BOOT.md)")
+        print()
+        print("--- begin ---")
+        print(body)
+        print("--- end ---")
+        print()
+        print(f"~{approx_tokens(body)} tokens, loaded in every conversation.")
+        return 0
 
     print()
     print("Connect clients to this vault")
-    print(f"  vault:  {vault_abs}  (folder: {vault_dir}/)")
+    print(f"  vault:  {os.path.abspath(repo_root)}  (folder: {vault_dir}/)")
+    print(f"  boot:   {vault_dir}/System/BOOT.md  (~{approx_tokens(body)} tokens)")
     print(f"  global: {target}")
     print()
 
     clients = detect_clients()
     if clients:
-        print("Clients detected on this machine:")
-        for c in clients:
-            print(f"  - {c}")
+        print("Clients detected:")
+        for name, method in clients:
+            how = "import (stays current)" if method == "import" else "paste (goes stale)"
+            print(f"  - {name:34s} {how}")
     else:
-        print("  No Claude clients detected. The block can still be written.")
+        print("  No clients detected. The import can still be installed.")
     print()
 
     existing = read_file(target)
@@ -176,36 +201,38 @@ def main():
             print("  No managed block found - nothing to remove.")
             return 0
         if action == "corrupt":
-            print("  Markers are unbalanced. Fix by hand; refusing to guess.", file=sys.stderr)
+            print("  Markers unbalanced. Fix by hand; refusing to guess.", file=sys.stderr)
             return 1
         if not apply_:
             print("  Would REMOVE the managed block. Re-run with --apply.")
             return 0
+        shutil.copy2(target, target + ".bak")
         with open(target, "w", encoding="utf-8") as fh:
             fh.write(new)
         print(f"  Removed the managed block from {target}")
         return 0
 
-    block = build_block(vault_abs, vault_dir)
+    block = build_block(repo_root)
     new, action = splice(existing, block)
 
     if action == "corrupt":
-        print("  Markers are unbalanced in the existing file.", file=sys.stderr)
+        print("  Markers unbalanced in the existing file.", file=sys.stderr)
         print("  Fix by hand; refusing to guess where the block ends.", file=sys.stderr)
         return 1
 
     verb = {"created": "CREATE", "updated": "UPDATE", "appended": "APPEND"}[action]
     print(f"  Would {verb} the managed block → {target}")
     if existing and action == "appended":
-        print(f"  Existing content ({len(existing)} bytes) will be left untouched.")
+        print(f"  Existing content ({len(existing)} bytes) left untouched.")
+    print()
+    print("--- block ---")
+    print(block)
+    print("--- end ---")
     print()
 
     if not apply_:
-        print("--- block ---")
-        print(block)
-        print("--- end ---")
-        print()
         print("Dry run. Re-run with --apply to write it.")
+        print("For Desktop, run with --paste to get the block to copy.")
         return 0
 
     os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -214,22 +241,24 @@ def main():
         print(f"  backup: {target}.bak")
     with open(target, "w", encoding="utf-8") as fh:
         fh.write(new)
-    print(f"  Wrote the managed block to {target}")
+    print(f"  Wrote the import line to {target}")
 
     print()
     print("-------------------------------------------------------")
-    print("  Still to do, by hand: register an MCP server that can")
+    print("  First session after this, the client may ask you to")
+    print("  approve reading an external import. Approve it once.")
+    print()
+    print("  Still to do by hand: register an MCP server that can")
     print("  reach this vault, at USER scope so it works from any")
     print("  directory. For Claude Code:")
     print()
     print("      claude mcp add <name> -s user -- <server command>")
     print()
-    print("  The default scope is 'local' and only works in the")
-    print("  directory where it was added - that is the usual reason")
-    print("  a vault appears unreachable from elsewhere.")
+    print("  The default scope is 'local' and only works where it")
+    print("  was added - the usual reason a vault seems unreachable.")
     print()
-    print("  Editor extensions inherit the user-scoped registration;")
-    print("  they need no separate setup.")
+    print("  Desktop chat cannot import. Run --paste and paste the")
+    print("  block into Settings -> Profile -> Personal Preferences.")
     print()
     print("  Verify: ask a client something only the vault knows,")
     print("  from an unrelated directory. Avoid questions the client")

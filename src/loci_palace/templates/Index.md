@@ -8,14 +8,16 @@ covers: how the vault works, folder structure, boot protocol, where things live,
 
 # {{VAULT_DIR}} — Index
 
-Entry point for any assistant connecting to this vault.
+Map of the vault. The operating contract lives in [[System/BOOT]] and is loaded
+globally via an import — this note is reference, not instruction.
 
 ## Boot
 
-1. Read [[Context/CRITICAL_FACTS]] — identity, ~150 tokens, always.
-2. For everything else, read `Views/manifest.tsv`, match the question against the `covers` column, and open that one note.
+1. [[System/BOOT]] — stance, routing, and write rules. Always loaded.
+2. [[Context/CRITICAL_FACTS]] — identity. Read when a question depends on personal context.
+3. `Views/manifest.tsv` — match the question against the `covers` column, open that one note.
 
-The manifest exists so the assistant never has to *search* to find a file. Searching works, but it costs more every time the vault grows, and it returns stale notes alongside current ones. A bounded index does not.
+The manifest exists so nothing has to *search* to find a file. Searching works, but it costs more every time the vault grows and returns stale notes alongside current ones. A bounded index does not.
 
 Fall back to searching only when no `covers` line matches — and say so, because a miss means that note needs curating.
 
@@ -27,7 +29,7 @@ Fall back to searching only when no `covers` line matches — and say so, becaus
   Context/      ← standing facts about you. Overwrite-only.
   Projects/     ← per-project state, curated, wiki-linked
   Sessions/     ← dated conversation summaries, one file per session
-  System/       ← machinery: Schema, vaultlib, lint, manifest, covers, hooks
+  System/       ← machinery: BOOT, Schema, vaultlib, lint, manifest, covers, hooks
   Views/        ← derived state: .base files, manifest.tsv
   Archive/      ← completed or stale notes, moved during compaction
 ```
@@ -55,9 +57,11 @@ Never hand-write a status that a view already derives. A hand-maintained index r
 
 ## Machinery vs content
 
-`System/`, `Views/` structure, this Index, and root `CLAUDE.md` are **machinery** — portable via `System/export.sh`, and must contain no personal content.
+`System/`, `Views/` structure, this Index, and root `CLAUDE.md` are **machinery** — portable via `System/connect.py` and the package, and must contain no personal content.
 
 `Context/`, `Projects/`, `Sessions/`, `Archive/`, and `Views/manifest.tsv` are **content** — they stay on this machine.
+
+Check with `bash {{VAULT_DIR}}/System/audit.sh`.
 
 ## Session end protocol (distillation)
 
@@ -88,4 +92,4 @@ python3 {{VAULT_DIR}}/System/manifest.py --check
 Both run automatically at commit via `System/hooks/pre-commit`.
 
 ## Related
-[[Context/CRITICAL_FACTS]] · [[Context/Decisions]] · [[System/Schema]]
+[[System/BOOT]] · [[Context/CRITICAL_FACTS]] · [[Context/Decisions]] · [[System/Schema]]

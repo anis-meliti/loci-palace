@@ -243,6 +243,7 @@ def cmd_init(args):
         ("Decisions.md", vault / "Context" / "Decisions.md"),
         ("Index.md", vault / "Index.md"),
         ("Schema.md", vault / "System" / "Schema.md"),
+        ("BOOT.md", vault / "System" / "BOOT.md"),
         ("CLAUDE.md", target / "CLAUDE.md"),
         ("gitignore", target / ".gitignore"),
         ("loci-local.json.example", target / (LOCAL_CONFIG_FILE + ".example")),
